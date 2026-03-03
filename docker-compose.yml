@@ -57,6 +57,8 @@ services:
       - "traefik.http.routers.calibre.rule=PathPrefix(`/add-books/`)"
       - "traefik.http.routers.calibre.entrypoints=websecure"
       - "traefik.http.routers.calibre.tls=true"
+      - "traefik.http.middlewares.calibre-strip.stripprefix.prefixes=/add-books"
+      - "traefik.http.routers.calibre.middlewares=calibre-strip@docker"
       - "traefik.http.services.calibre.loadbalancer.server.port=8084"
       - "traefik.docker.network=web"
 
