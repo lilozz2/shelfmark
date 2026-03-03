@@ -1,4 +1,28 @@
 services:
+  traefik:
+    image: traefik:v2.11
+    restart: always
+    container_name: traefik
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=web"
+      - "--providers.file.filename=/etc/traefik/tls.yml"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - web
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./certs:/certs:ro
+      - ./traefik-tls.yml:/etc/traefik/tls.yml:ro
+
   calibre-web-automated-book-downloader:
     image: ghcr.io/calibrain/calibre-web-automated-book-downloader:latest
     # Uncomment to build the image from the Dockerfile for local testing changes.
@@ -18,8 +42,8 @@ services:
       # Queue management settings
       MAX_CONCURRENT_DOWNLOADS: 3
       DOWNLOAD_PROGRESS_UPDATE_INTERVAL: 5
-    ports:
-      - 8084:8084
+    networks:
+      - web
     restart: unless-stopped
     volumes:
       # This is where the books will be downloaded to, usually it would be
@@ -28,3 +52,14 @@ services:
       # This is the location of CWA's app.db, which contains authentication
       # details. Comment out to disable authentication
       #- /cwa/config/path/app.db:/auth/app.db:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.calibre.rule=PathPrefix(`/add-books/`)"
+      - "traefik.http.routers.calibre.entrypoints=websecure"
+      - "traefik.http.routers.calibre.tls=true"
+      - "traefik.http.services.calibre.loadbalancer.server.port=8084"
+      - "traefik.docker.network=web"
+
+networks:
+  web:
+    external: true

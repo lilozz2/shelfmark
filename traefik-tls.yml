@@ -1,0 +1,19 @@
+tls:
+  certificates:
+    - certFile: /certs/calibre.crt
+      keyFile: /certs/calibre.key
+
+http:
+  routers:
+    main:
+      rule: "PathPrefix(`/`)"
+      entryPoints:
+        - websecure
+      service: main-service
+      tls: {}
+
+  services:
+    main-service:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8083"
