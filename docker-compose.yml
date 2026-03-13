@@ -13,6 +13,7 @@ services:
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.addbooks.address=:8084"
       - "--log.level=DEBUG"
       - "--accesslog=true"
 
@@ -20,6 +21,7 @@ services:
       - "80:80"
       - "443:443"
       - "8080:8080"
+      - "8084:8084"
     networks:
       - web
     volumes:
@@ -49,8 +51,7 @@ services:
     networks:
       - web
     restart: unless-stopped
-    ports:
-      - "8084:8084"
+    # port 8084 is handled by Traefik
     volumes:
       # This is where the books will be downloaded to, usually it would be
       # the same as whatever you gave in "calibre-web-automated"

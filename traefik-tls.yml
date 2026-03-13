@@ -11,9 +11,19 @@ http:
         - websecure
       service: main-service
       tls: {}
+    addbooks:
+      rule: "Host(`www.homelibrary.me`)"
+      entryPoints:
+        - addbooks
+      service: addbooks-service
+      tls: {}
 
   services:
     main-service:
       loadBalancer:
         servers:
           - url: "http://host.docker.internal:8083"
+    addbooks-service:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8084"
