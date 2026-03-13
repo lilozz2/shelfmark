@@ -12,6 +12,8 @@ services:
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--entrypoints.websecure.address=:443"
+      - "--log.level=DEBUG"
+      - "--accesslog=true"
 
     ports:
       - "80:80"
