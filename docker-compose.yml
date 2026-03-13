@@ -45,6 +45,8 @@ services:
     networks:
       - web
     restart: unless-stopped
+    ports:
+      - "8084:8084"
     volumes:
       # This is where the books will be downloaded to, usually it would be
       # the same as whatever you gave in "calibre-web-automated"
@@ -52,15 +54,6 @@ services:
       # This is the location of CWA's app.db, which contains authentication
       # details. Comment out to disable authentication
       #- /cwa/config/path/app.db:/auth/app.db:ro
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.calibre.rule=PathPrefix(`/add-books/`)"
-      - "traefik.http.routers.calibre.entrypoints=websecure"
-      - "traefik.http.routers.calibre.tls=true"
-      - "traefik.http.middlewares.calibre-strip.stripprefix.prefixes=/add-books"
-      - "traefik.http.routers.calibre.middlewares=calibre-strip@docker"
-      - "traefik.http.services.calibre.loadbalancer.server.port=8084"
-      - "traefik.docker.network=web"
 
 networks:
   web:
