@@ -13,7 +13,6 @@ services:
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--entrypoints.websecure.address=:443"
-      - "--entrypoints.addbooks.address=:8084"
       - "--log.level=DEBUG"
       - "--accesslog=true"
 
@@ -21,7 +20,6 @@ services:
       - "80:80"
       - "443:443"
       - "8080:8080"
-      - "8084:8084"
     networks:
       - web
     volumes:
@@ -35,7 +33,15 @@ services:
     # Remember to comment out the image line above.
     #build: .
     container_name: calibre-web-automated-book-downloader
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cwab.rule=PathPrefix(`/add-books/`)"
+      - "traefik.http.routers.cwab.entrypoints=websecure"
+      - "traefik.http.routers.cwab.middlewares=cwab-strip"
+      - "traefik.http.middlewares.cwab-strip.stripprefix.prefixes=/add-books"
+      - "traefik.http.services.cwab.loadbalancer.server.port=8084"
     environment:
+      APPLICATION_ROOT: /add-books
       FLASK_PORT: 8084
       LOG_LEVEL: info
       BOOK_LANGUAGE: en
