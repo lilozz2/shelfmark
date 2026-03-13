@@ -6,7 +6,7 @@ tls:
 http:
   routers:
     main:
-      rule: "Host(`homelibrary.me`)"
+      rule: "Host(`www.homelibrary.me`)"
       entryPoints:
         - websecure
       service: main-service
