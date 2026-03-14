@@ -38,6 +38,7 @@ services:
       - "traefik.http.routers.cwab.rule=Host(`www.homelibrary.me`) && PathPrefix(`/add-books/`)"
       - "traefik.http.routers.cwab.entrypoints=websecure"
       - "traefik.http.routers.cwab.middlewares=cwab-strip"
+      - "traefik.http.routers.cwab.tls=true"
       - "traefik.http.middlewares.cwab-strip.stripprefix.prefixes=/add-books"
       - "traefik.http.services.cwab.loadbalancer.server.port=8084"
     environment:
