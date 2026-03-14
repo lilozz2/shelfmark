@@ -31,7 +31,7 @@ services:
     image: ghcr.io/calibrain/calibre-web-automated-book-downloader:latest
     # Uncomment to build the image from the Dockerfile for local testing changes.
     # Remember to comment out the image line above.
-    #build: .
+    build: .
     container_name: calibre-web-automated-book-downloader
     labels:
       - "traefik.enable=true"

@@ -13,7 +13,7 @@ import typing
 
 from logger import setup_logger
 from config import _SUPPORTED_BOOK_LANGUAGE, BOOK_LANGUAGE, SUPPORTED_FORMATS
-from env import FLASK_HOST, FLASK_PORT, APP_ENV, CWA_DB_PATH, DEBUG, USING_EXTERNAL_BYPASSER, BUILD_VERSION, RELEASE_VERSION
+from env import FLASK_HOST, FLASK_PORT, APP_ENV, CWA_DB_PATH, DEBUG, USING_EXTERNAL_BYPASSER, BUILD_VERSION, RELEASE_VERSION, APPLICATION_ROOT
 import backend
 
 from models import SearchFilters
@@ -22,7 +22,7 @@ logger = setup_logger(__name__)
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app)  # type: ignore
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Disable caching
-app.config['APPLICATION_ROOT'] = '/'
+app.config['APPLICATION_ROOT'] = APPLICATION_ROOT
 
 # Flask logger
 app.logger.handlers = logger.handlers
