@@ -1,10 +1,54 @@
 #!/bin/bash
-LOG_DIR=${LOG_ROOT:-/var/log/}/cwa-book-downloader
-mkdir -p $LOG_DIR
-LOG_FILE=${LOG_DIR}/cwa-bd_entrypoint.log
 
-# Cleanup any existing files or folders in the log directory
-rm -rf $LOG_DIR/*
+is_truthy() {
+    case "${1,,}" in
+        true|yes|1|y) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+ENABLE_LOGGING_VALUE="${ENABLE_LOGGING:-true}"
+LOG_PIPE_DIR=""
+LOG_PIPE=""
+TEE_PID=""
+
+start_file_logging() {
+    local logfile="$1"
+
+    LOG_PIPE_DIR="$(mktemp -d)"
+    LOG_PIPE="${LOG_PIPE_DIR}/shelfmark-log.pipe"
+    mkfifo "$LOG_PIPE"
+
+    tee -a "$logfile" < "$LOG_PIPE" &
+    TEE_PID=$!
+
+    exec 3>&1 4>&2
+    exec > "$LOG_PIPE" 2>&1
+}
+
+stop_file_logging() {
+    if [ -z "${TEE_PID:-}" ]; then
+        return 0
+    fi
+
+    exec 1>&3 2>&4
+    exec 3>&- 4>&-
+
+    rm -f "$LOG_PIPE"
+    rmdir "$LOG_PIPE_DIR" 2>/dev/null || true
+
+    wait "$TEE_PID" 2>/dev/null || true
+    TEE_PID=""
+}
+
+if is_truthy "$ENABLE_LOGGING_VALUE"; then
+    LOG_DIR=${LOG_ROOT:-/var/log/}/shelfmark
+    mkdir -p "$LOG_DIR"
+    LOG_FILE="${LOG_DIR}/shelfmark_entrypoint.log"
+    # Keep the previous entrypoint log instead of deleting all history on boot.
+    [ -f "${LOG_FILE}.prev" ] && rm -f "${LOG_FILE}.prev"
+    [ -f "$LOG_FILE" ] && mv "$LOG_FILE" "${LOG_FILE}.prev"
+fi
 
 (
     if [ "$USING_TOR" = "true" ]; then
@@ -12,10 +56,16 @@ rm -rf $LOG_DIR/*
     fi
 )
 
-exec 3>&1 4>&2
-exec > >(tee -a $LOG_FILE) 2>&1
+if is_truthy "$ENABLE_LOGGING_VALUE"; then
+    start_file_logging "$LOG_FILE"
+fi
+
 echo "Starting entrypoint script"
-echo "Log file: $LOG_FILE"
+if is_truthy "$ENABLE_LOGGING_VALUE"; then
+    echo "Log file: $LOG_FILE"
+else
+    echo "File logging disabled (ENABLE_LOGGING=$ENABLE_LOGGING_VALUE)"
+fi
 set -e
 
 # Print build version
@@ -28,40 +78,75 @@ if [ "$TZ" ]; then
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 fi
 
-# Set UID if not set
-if [ -z "$UID" ]; then
-    UID=1000
+# Determine user ID with proper precedence:
+# 1. PUID (LinuxServer.io standard - recommended)
+# 2. UID (legacy, for backward compatibility with existing installs)
+# 3. Default to 1000
+#
+# Note: $UID is a bash builtin that's always set. We use `printenv` to detect
+# if UID was explicitly set as an environment variable (e.g., via docker-compose).
+if [ -n "$PUID" ]; then
+    RUN_UID="$PUID"
+    echo "Using PUID=$RUN_UID"
+elif printenv UID >/dev/null 2>&1; then
+    RUN_UID="$(printenv UID)"
+    echo "Using UID=$RUN_UID (legacy - consider migrating to PUID)"
+else
+    RUN_UID=1000
+    echo "Using default UID=$RUN_UID"
 fi
 
-# Set GID if not set
-if [ -z "$GID" ]; then
-    GID=100
+# Determine group ID with proper precedence:
+# 1. PGID (LinuxServer.io standard - recommended)
+# 2. GID (legacy, for backward compatibility with existing installs)
+# 3. Default to 1000
+if [ -n "$PGID" ]; then
+    RUN_GID="$PGID"
+    echo "Using PGID=$RUN_GID"
+elif [ -n "$GID" ]; then
+    RUN_GID="$GID"
+    echo "Using GID=$RUN_GID (legacy - consider migrating to PGID)"
+else
+    RUN_GID=1000
+    echo "Using default GID=$RUN_GID"
 fi
 
-if ! getent group "$GID" >/dev/null; then
-    echo "Adding group $GID with name appuser"
-    groupadd -g "$GID" appuser
+if ! getent group "$RUN_GID" >/dev/null; then
+    echo "Adding group $RUN_GID with name appuser"
+    groupadd -g "$RUN_GID" appuser
 fi
 
 # Create user if it doesn't exist
-if ! id -u "$UID" >/dev/null 2>&1; then
-    echo "Adding user $UID with name appuser"
-    useradd -u "$UID" -g "$GID" -d /app -s /sbin/nologin appuser
+if ! id -u "$RUN_UID" >/dev/null 2>&1; then
+    echo "Adding user $RUN_UID with name appuser"
+    useradd -u "$RUN_UID" -g "$RUN_GID" -d /app -s /sbin/nologin appuser
 fi
 
 # Get username for the UID (whether we just created it or it existed)
-USERNAME=$(getent passwd "$UID" | cut -d: -f1)
-echo "Username for UID $UID is $USERNAME"
+USERNAME=$(getent passwd "$RUN_UID" | cut -d: -f1)
+echo "Username for UID $RUN_UID is $USERNAME"
 
 test_write() {
-    folder=$1
-    test_file=$folder/calibre-web-automated-book-downloader_TEST_WRITE
-    mkdir -p $folder
-    (
-        echo 0123456789_TEST | sudo -E -u "$USERNAME" HOME=/app tee $test_file > /dev/null
-    )
-    FILE_CONTENT=$(cat $test_file || echo "")
-    rm -f $test_file
+    local folder=$1
+    local test_file="$folder/shelfmark_TEST_WRITE"
+    local FILE_CONTENT
+    local result
+    local result_text
+
+    if ! mkdir -p "$folder"; then
+        echo "Failed to create directory for write test: $folder"
+        return 1
+    fi
+
+    if ! (
+        echo 0123456789_TEST | gosu "$USERNAME" env HOME=/app tee "$test_file" > /dev/null
+    ); then
+        echo "Failed to write test file in $folder as $USERNAME"
+        return 1
+    fi
+
+    FILE_CONTENT=$(cat "$test_file" 2>/dev/null || echo "")
+    rm -f "$test_file"
     [ "$FILE_CONTENT" = "0123456789_TEST" ]
     result=$?
     if [ $result -eq 0 ]; then
@@ -75,6 +160,7 @@ test_write() {
 
 make_writable() {
     folder=$1
+    did_full_chown=0
     set +e
     test_write $folder
     is_writable=$?
@@ -84,34 +170,163 @@ make_writable() {
     else
         echo "Folder $folder is not writable, changing ownership"
         change_ownership $folder
-        chmod g+r,g+w $folder || echo "Failed to change group permissions for ${folder}, continuing..."
+        chmod -R g+r,g+w $folder || echo "Failed to change group permissions for ${folder}, continuing..."
+        did_full_chown=1
+    fi
+    # Fix any misowned subdirectories/files (e.g., from previous runs as root)
+    if [ "$did_full_chown" -eq 0 ] && [ -d "$folder" ]; then
+        echo "Checking for misowned files/directories in $folder"
+        # Stay on the same filesystem to avoid traversing mounted subpaths
+        # (for example read-only bind mounts under /app in dev setups).
+        find "$folder" -xdev -mindepth 1 \( ! -user "$RUN_UID" -o ! -group "$RUN_GID" \) \
+            -exec chown "$RUN_UID:$RUN_GID" {} + 2>/dev/null || true
     fi
     test_write $folder || echo "Failed to test write to ${folder}, continuing..."
+}
+
+fix_misowned() {
+    folder=$1
+    mkdir -p $folder
+    echo "Checking for misowned files/directories in $folder"
+    # Stay on the same filesystem to avoid traversing mounted subpaths
+    # (for example read-only bind mounts under /app in dev setups).
+    find "$folder" -xdev \( ! -user "$RUN_UID" -o ! -group "$RUN_GID" \) \
+        -exec chown "$RUN_UID:$RUN_GID" {} + 2>/dev/null || true
 }
 
 # Ensure proper ownership of application directories
 change_ownership() {
   folder=$1
   mkdir -p $folder
-  echo "Changing ownership of $folder to $USERNAME:$GID"
-  chown -R "${UID}" "${folder}" || echo "Failed to change user ownership for ${folder}, continuing..."
-  chown -R ":${GID}" "${folder}" || echo "Failed to change group ownership for ${folder}, continuing..."
+  echo "Changing ownership of $folder to $USERNAME:$RUN_GID"
+  chown -R "${RUN_UID}:${RUN_GID}" "${folder}" || echo "Failed to change ownership for ${folder}, continuing..."
 }
 
-change_ownership /app
-change_ownership /var/log/cwa-book-downloader
-change_ownership /tmp/cwa-book-downloader
+ensure_tree_writable() {
+    local folder="$1"
+
+    make_writable "$folder"
+    if [ -d "$folder" ]; then
+        chmod -R u+rwX,g+rwX "$folder" || echo "Failed to relax permissions for ${folder}, continuing..."
+    fi
+}
+
+ensure_symlinked_dir() {
+    local link_path="$1"
+    local target_path="$2"
+
+    ensure_tree_writable "$target_path"
+
+    if [ -L "$link_path" ]; then
+        local current_target
+        current_target=$(readlink "$link_path" 2>/dev/null || echo "")
+        if [ "$current_target" = "$target_path" ]; then
+            echo "$link_path already points to $target_path"
+            return 0
+        fi
+        echo "Replacing symlink $link_path -> $current_target with $target_path"
+        rm -f "$link_path" || echo "Failed to replace symlink ${link_path}, continuing..."
+    elif [ -d "$link_path" ]; then
+        echo "Moving existing scratch files from $link_path to $target_path"
+        find "$link_path" -xdev -mindepth 1 -maxdepth 1 -exec mv -t "$target_path" {} + 2>/dev/null || true
+        ensure_tree_writable "$target_path"
+
+        if ! rmdir "$link_path" 2>/dev/null; then
+            echo "Could not replace $link_path with symlink, leaving existing directory in place"
+            ensure_tree_writable "$link_path"
+            return 0
+        fi
+    elif [ -e "$link_path" ]; then
+        echo "$link_path exists and is not a directory, leaving it in place"
+        return 0
+    fi
+
+    if [ ! -e "$link_path" ]; then
+        ln -s "$target_path" "$link_path" || echo "Failed to create symlink ${link_path}, continuing..."
+    fi
+}
+
+fix_misowned /app
+fix_misowned /var/log/shelfmark
+fix_misowned /tmp/shelfmark
+
+# Keep SeleniumBase on its default /app-based paths, but redirect the scratch
+# directories into /tmp so bypasser startup doesn't depend on image-layer writes.
+if [ "${USING_EXTERNAL_BYPASSER}" != "true" ]; then
+    ensure_symlinked_dir /app/downloaded_files /tmp/shelfmark/seleniumbase/downloaded_files
+    ensure_symlinked_dir /app/archived_files /tmp/shelfmark/seleniumbase/archived_files
+
+    # Keep SeleniumBase's bundled drivers directory writable as well for
+    # compatibility with legacy UC code paths that still probe bundled assets.
+    set +e
+    SELENIUMBASE_DRIVERS_DIR=$(python3 -c "import pathlib, seleniumbase; print(pathlib.Path(seleniumbase.__file__).resolve().parent / 'drivers')" 2>/dev/null)
+    set -e
+
+    if [ -n "$SELENIUMBASE_DRIVERS_DIR" ] && [ -d "$SELENIUMBASE_DRIVERS_DIR" ]; then
+        change_ownership "$SELENIUMBASE_DRIVERS_DIR"
+
+        # If the legacy driver already exists, ensure it's executable for the runtime user.
+        if [ -f "${SELENIUMBASE_DRIVERS_DIR}/uc_driver" ]; then
+            chmod +x "${SELENIUMBASE_DRIVERS_DIR}/uc_driver" || echo "Failed to chmod uc_driver, continuing..."
+        fi
+    fi
+fi
 
 # Test write to all folders
-make_writable /cwa-book-ingest
+make_writable ${CONFIG_DIR:-/config}
+make_writable ${INGEST_DIR:-/books}
 
-# Set the command to run based on the environment
-is_prod=$(echo "$APP_ENV" | tr '[:upper:]' '[:lower:]')
-if [ "$is_prod" = "prod" ]; then 
-    command="gunicorn -t 300 -b ${FLASK_HOST:-0.0.0.0}:${FLASK_PORT:-8084} app:app"
-else
-    command="python3 app.py"
+# Fix permissions on directories configured in settings
+echo "Checking for additional configured directories..."
+if [ -f /app/scripts/fix_permissions.py ]; then
+    configured_dirs=$(python3 /app/scripts/fix_permissions.py 2>/dev/null || echo "")
+    if [ -n "$configured_dirs" ]; then
+        echo "$configured_dirs" | while read -r dir; do
+            if [ -n "$dir" ] && [ -d "$dir" ]; then
+                echo "Checking configured directory: $dir"
+                make_writable "$dir"
+            fi
+        done
+    fi
 fi
+
+# Fallback to root if config dir is still not writable (common on NAS/Unraid after upgrade from v0.4.0)
+CONFIG_PATH=${CONFIG_DIR:-/config}
+set +e
+test_write "$CONFIG_PATH" >/dev/null 2>&1
+config_ok=$?
+set -e
+
+if [ $config_ok -ne 0 ] && [ "$RUN_UID" != "0" ]; then
+    config_owner=$(stat -c '%u' "$CONFIG_PATH" 2>/dev/null || echo "unknown")
+    if [ "$config_owner" = "0" ]; then
+        echo ""
+        echo "========================================================"
+        echo "WARNING: Permission issue detected!"
+        echo ""
+        echo "Config directory is owned by root but PUID=$RUN_UID."
+        echo "This typically happens after upgrading from v0.4.0 where"
+        echo "PUID/PGID settings were not respected."
+        echo ""
+        echo "Falling back to running as root to prevent data loss."
+        echo ""
+        echo "To fix this permanently, run on your HOST machine:"
+        echo "  chown -R $RUN_UID:$RUN_GID /path/to/config"
+        echo ""
+        echo "Then restart the container."
+        echo "========================================================"
+        echo ""
+        RUN_UID=0
+        RUN_GID=0
+        USERNAME=root
+    fi
+fi
+
+# Always run Gunicorn (even when DEBUG=true) to ensure Socket.IO WebSocket
+# upgrades work reliably on customer machines.
+# Map app LOG_LEVEL (often DEBUG/INFO/...) to gunicorn's --log-level (lowercase).
+gunicorn_loglevel=$([ "$DEBUG" = "true" ] && echo debug || echo "${LOG_LEVEL:-info}" | tr '[:upper:]' '[:lower:]')
+command="gunicorn --log-level ${gunicorn_loglevel} --access-logfile - --error-logfile - --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker --workers 1 -t 300 -b ${FLASK_HOST:-0.0.0.0}:${FLASK_PORT:-8084} shelfmark.main:app"
 
 # If DEBUG and not using an external bypass
 if [ "$DEBUG" = "true" ] && [ "$USING_EXTERNAL_BYPASSER" != "true" ]; then
@@ -167,18 +382,24 @@ if [ "$DEBUG" = "true" ] && [ "$USING_EXTERNAL_BYPASSER" != "true" ]; then
     echo "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
 fi
 
-# Hacky way to verify /tmp has at least 1MB of space and is writable/readable
+# Verify /tmp has at least 1MB of space and is writable/readable
 echo "Verifying /tmp has enough space"
-rm -f /tmp/test.cwa-bd
-for i in {1..150000}; do printf "%04d\n" $i; done > /tmp/test.cwa-bd
-sum=$(python3 -c "print(sum(int(l.strip()) for l in open('/tmp/test.cwa-bd').readlines()))")
-[ "$sum" == 11250075000 ] && echo "Success: /tmp is writable" || (echo "Failure: /tmp is not writable" && exit 1)
-rm /tmp/test.cwa-bd
+rm -f /tmp/test.shelfmark
+if dd if=/dev/zero of=/tmp/test.shelfmark bs=1M count=1 2>/dev/null && \
+   [ "$(wc -c < /tmp/test.shelfmark)" -eq 1048576 ]; then
+    rm -f /tmp/test.shelfmark
+    echo "Success: /tmp is writable and readable"
+else
+    echo "Failure: /tmp is not writable or has insufficient space"
+    exit 1
+fi
 
-echo "Running command: '$command' as '$USERNAME' in '$APP_ENV' mode"
+echo "Running command: '$command' as '$USERNAME' (debug=$is_debug)"
 
-# Stop logging
-exec 1>&3 2>&4
-exec 3>&- 4>&-
+# Set umask for file permissions (default: 0022 = files 644, dirs 755)
+UMASK_VALUE=${UMASK:-0022}
+echo "Setting umask to $UMASK_VALUE"
+umask $UMASK_VALUE
 
-exec sudo -E -u "$USERNAME" HOME=/app $command
+stop_file_logging
+exec gosu "$USERNAME" env HOME=/app $command

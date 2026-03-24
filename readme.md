@@ -1,300 +1,256 @@
-# 📚 Calibre-Web-Automated-Book-Downloader
+# 📚 Shelfmark: Book Downloader
 
-![Calibre-Web Automated Book Downloader](static/media/logo.png 'Calibre-Web Automated Book Downloader')
+Formerly *Calibre Web Automated Book Downloader (CWABD)*
 
-An intuitive web interface for searching and requesting book downloads, designed to work seamlessly with [Calibre-Web-Automated](https://github.com/crocodilestick/Calibre-Web-Automated). This project streamlines the process of downloading books and preparing them for integration into your Calibre library.
+<img src="src/frontend/public/logo.png" alt="Shelfmark" width="200">
+
+Shelfmark is a self-hosted web interface for searching and downloading books and audiobooks from multiple sources. Works out of the box with popular web sources, no configuration required. Add metadata providers, additional release sources, and download clients to build a single hub for your digital library. Supports multiple users with a built-in request system, so you can share your instance with others and let them browse and request books on their own.
+
+**Fully standalone** - no external dependencies required. Works great alongside the following library tools, with support for automatic imports:
+- [Calibre](https://calibre-ebook.com/)
+- [Calibre-Web](https://github.com/janeczku/calibre-web)
+- [Calibre-Web-Automated](https://github.com/crocodilestick/Calibre-Web-Automated)
+- [Booklore](https://github.com/booklore-app/booklore)
+- [Audiobookshelf](https://github.com/advplyr/audiobookshelf)
 
 ## ✨ Features
 
-- 🌐 User-friendly web interface for book search and download
-- 🔄 Automated download to your specified ingest folder
-- 🔌 Seamless integration with Calibre-Web-Automated
-- 📖 Support for multiple book formats (epub, mobi, azw3, fb2, djvu, cbz, cbr)
-- 🛡️ Cloudflare bypass capability for reliable downloads
-- 🐳 Docker-based deployment for quick setup
+- **One-Stop Interface** - A clean, modern UI to search, browse, and download from multiple sources in one place
+- **Multiple Sources** - Popular archive websites, Torrent, Usenet, and IRC download support
+- **Audiobook Support** - Full audiobook search and download with dedicated processing
+- **Two Search Modes**:
+  - **Direct** - Search popular web sources
+  - **Universal** - Search metadata providers (Hardcover, Open Library) for richer book and audiobook discovery, with multi-source downloads
+- **Multi-User & Requests** - Share your instance with others, let users browse and request books, and manage approvals with configurable notifications
+- **Authentication** - Built-in login, OIDC single sign-on, proxy auth, and Calibre-Web database support
+- **Real-Time Progress** - Unified download queue with live status updates across all sources
+- **Cloudflare Bypass** - Built-in bypasser for reliable access to protected sources
 
 ## 🖼️ Screenshots
 
-![Main search interface Screenshot](README_images/search.png 'Main search interface')
+**Home screen**
+![Home screen](README_images/homescreen.png 'Home screen')
 
-![Details modal Screenshot placeholder](README_images/details.png 'Details modal')
+**Search results**
+![Search results](README_images/search-results.png 'Search results')
 
-![Download queue Screenshot placeholder](README_images/downloading.png 'Download queue')
+**Multi-source downloads**
+![Multi-source downloads](README_images/multi-source.png 'Multi-source downloads')
+
+**Download queue**
+![Download queue](README_images/downloads.png 'Download queue')
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Docker
-- Docker Compose
-- A running instance of [Calibre-Web-Automated](https://github.com/crocodilestick/Calibre-Web-Automated) (recommended)
+- Docker & Docker Compose
 
-### Installation Steps
+### Installation
 
-1. Get the docker-compose.yml:
-
+1. Download the [docker-compose file](compose/docker-compose.yml):
    ```bash
-   curl -O https://raw.githubusercontent.com/calibrain/calibre-web-automated-book-downloader/refs/heads/main/docker-compose.yml
+   curl -O https://raw.githubusercontent.com/calibrain/shelfmark/main/compose/docker-compose.yml
    ```
 
 2. Start the service:
-
    ```bash
    docker compose up -d
    ```
 
-3. Access the web interface at `http://localhost:8084`
+3. Open `http://localhost:8084`
 
-## ⚙️ Configuration
+That's it! Configure settings through the web interface as needed.
 
-### Environment Variables
-
-#### Application Settings
-
-| Variable          | Description             | Default Value      |
-| ----------------- | ----------------------- | ------------------ |
-| `FLASK_PORT`      | Web interface port      | `8084`             |
-| `FLASK_HOST`      | Web interface binding   | `0.0.0.0`          |
-| `DEBUG`           | Debug mode toggle       | `false`            |
-| `INGEST_DIR`      | Book download directory | `/cwa-book-ingest` |
-| `TZ`              | Container timezone      | `UTC`              |
-| `UID`             | Runtime user ID         | `1000`             |
-| `GID`             | Runtime group ID        | `100`              |
-| `CWA_DB_PATH`     | Calibre-Web's database  | None               |
-| `ENABLE_LOGGING`  | Enable log file         | `true`             |
-| `LOG_LEVEL`       | Log level to use        | `info`             |
-
-If you wish to enable authentication, you must set `CWA_DB_PATH` to point to Calibre-Web's `app.db`, in order to match the username and password.
-
-If logging is enabld, log folder default location is `/var/log/cwa-book-downloader`
-Available log levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Higher levels show fewer messages.
-
-Note that if using TOR, the TZ will be calculated automatically based on IP.
-
-#### Download Settings
-
-| Variable               | Description                                               | Default Value                     |
-| ---------------------- | --------------------------------------------------------- | --------------------------------- |
-| `MAX_RETRY`            | Maximum retry attempts                                    | `3`                               |
-| `DEFAULT_SLEEP`        | Retry delay (seconds)                                     | `5`                               |
-| `MAIN_LOOP_SLEEP_TIME` | Processing loop delay (seconds)                           | `5`                               |
-| `SUPPORTED_FORMATS`    | Supported book formats                                    | `epub,mobi,azw3,fb2,djvu,cbz,cbr` |
-| `BOOK_LANGUAGE`        | Preferred language for books                              | `en`                              |
-| `AA_DONATOR_KEY`       | Optional Donator key for Anna's Archive fast download API | ``                                |
-| `USE_BOOK_TITLE`       | Use book title as filename instead of ID                  | `false`                           |
-| `PRIORITIZE_WELIB`     | When downloading, download from WELIB first instead of AA | `false`                           |
-
-If you change `BOOK_LANGUAGE`, you can add multiple comma separated languages, such as `en,fr,ru` etc.  
-
-#### AA 
-
-| Variable               | Description                                               | Default Value                     |
-| ---------------------- | --------------------------------------------------------- | --------------------------------- |
-| `AA_BASE_URL`          | Base URL of Annas-Archive (could be changed for a proxy)  | `https://annas-archive.org`       |
-| `USE_CF_BYPASS`        | Disable CF bypass and use alternative links instead       | `true`                            |
-
-If you are a donator on AA, you can use your Key in `AA_DONATOR_KEY` to speed up downloads and bypass the wait times.
-If disabling the cloudflare bypass, you will be using alternative download hosts, such as libgen or z-lib, but they usually have a delay before getting the more recent books and their collection is not as big as aa's. But this setting should work for the majority of books.
-
-#### Network Settings
-
-| Variable               | Description                     | Default Value           |
-| ---------------------- | ------------------------------- | ----------------------- |
-| `AA_ADDITIONAL_URLS`   | Proxy URLs for AA (, separated) | ``                      |
-| `HTTP_PROXY`           | HTTP proxy URL                  | ``                      |
-| `HTTPS_PROXY`          | HTTPS proxy URL                 | ``                      |
-| `CUSTOM_DNS`           | Custom DNS IP                   | ``                      |
-| `USE_DOH`              | Use DNS over HTTPS              | `false`                 |
-
-For proxy configuration, you can specify URLs in the following format:
-```bash
-# Basic proxy
-HTTP_PROXY=http://proxy.example.com:8080
-HTTPS_PROXY=http://proxy.example.com:8080
-
-# Proxy with authentication
-HTTP_PROXY=http://username:password@proxy.example.com:8080
-HTTPS_PROXY=http://username:password@proxy.example.com:8080
-```
-
-
-The `CUSTOM_DNS` setting supports two formats:
-
-1. **Custom DNS Servers**: A comma-separated list of DNS server IP addresses
-   - Example: `127.0.0.53,127.0.1.53` (useful for PiHole)
-   - Supports both IPv4 and IPv6 addresses in the same string
-
-2. **Preset DNS Providers**: Use one of these predefined options:
-   - `google` - Google DNS
-   - `quad9` - Quad9 DNS
-   - `cloudflare` - Cloudflare DNS
-   - `opendns` - OpenDNS
-
-For users experiencing ISP-level website blocks (such as Virgin Media in the UK), using alternative DNS providers like Cloudflare may help bypass these restrictions
-
-If a `CUSTOM_DNS` is specified from the preset providers, you can also set a `USE_DOH=true` to force using DNS over HTTPS,
-which might also help in certain network situations. Note that only `google`, `quad9`, `cloudflare` and `opendns` are 
-supported for now, and any other value in `CUSTOM_DNS` will make the `USE_DOH` flag ignored.
-
-Try something like this :
-```bash
-CUSTOM_DNS=cloudflare
-USE_DOH=true
-```
-
-#### Custom configuration
-
-| Variable               | Description                                                 | Default Value           |
-| ---------------------- | ----------------------------------------------------------- | ----------------------- |
-| `CUSTOM_SCRIPT`        | Path to an executable script that tuns after each download  | ``                      |
-
-If `CUSTOM_SCRIPT` is set, it will be executed after each successful download but before the file is moved to the ingest directory. This allows for custom processing like format conversion or validation.
-
-The script is called with the full path of the downloaded file as its argument. Important notes:
-- The script must preserve the original filename for proper processing
-- The file can be modified or even deleted if needed
-- The file will be moved to `/cwa-book-ingest` after the script execution (if not deleted)
-
-You can specify these configuration in this format :
-```
-environment:
-  - CUSTOM_SCRIPT=/scripts/process-book.sh
-
-volumes:
-  - local/scripts/custom_script.sh:/scripts/process-book.sh
-```
-
-### Volume Configuration
+### Volume Setup
 
 ```yaml
 volumes:
-  - /your/local/path:/cwa-book-ingest
-  - /cwa/config/path/app.db:/auth/app.db:ro
-```
-**Note** - If your library volume is on a cifs share, you will get a "database locked" error until you add **nobrl** to your mount line in your fstab file. e.g. //192.168.1.1/Books /media/books cifs credentials=.smbcredentials,uid=1000,gid=1000,iocharset=utf8,**nobrl** - See https://github.com/crocodilestick/Calibre-Web-Automated/issues/64#issuecomment-2712769777
-
-Mount should align with your Calibre-Web-Automated ingest folder.
-
-## Variants:
-
-### 🧅 Tor Variant
-
-This application also offers a variant that routes all its traffic through the Tor network. This can be useful for enhanced privacy or bypassing network restrictions.
-
-To use the Tor variant:
-
-1.  Get the Tor-specific docker-compose file:
-    ```bash
-    curl -O https://raw.githubusercontent.com/calibrain/calibre-web-automated-book-downloader/refs/heads/main/docker-compose.tor.yml
-    ```
-2.  Start the service using this file:
-    ```bash
-    docker compose -f docker-compose.tor.yml up -d
-    ```
-
-**Important Considerations for Tor:**
-
-*   **Capabilities:** This variant requires the `NET_ADMIN` and `NET_RAW` Docker capabilities to configure `iptables` for transparent Tor proxying.
-*   **Timezone:** When running in Tor mode, the container will attempt to determine the timezone based on the Tor exit node's IP address and set it automatically. This will override the `TZ` environment variable if it is set.
-*   **Network Settings:** Custom DNS, DoH, and HTTP(S) proxy settings (`CUSTOM_DNS`, `USE_DOH`, `HTTP_PROXY`, `HTTPS_PROXY`) are ignored when using the Tor variant, as all traffic goes through Tor.
-
-### External Cloudflare resolver variant
-
-This variant allows the application to use an external service to bypass Cloudflare protection, instead of relying on the built-in bypasser. This is useful if you already have a dedicated Cloudflare resolver (such as [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) or compatible services like [ByParr](https://github.com/ThePhaseless/Byparr)) running elsewhere.
-
-#### How it works:
-
-- When enabled, all requests that require Cloudflare bypass are sent to your external resolver service.
-- The application communicates with the resolver using its API.
-- This approach can improve reliability and performance, especially if your external resolver is optimized or shared across multiple applications.
-
-#### Configuration
-
-| Variable               | Description                                                 | Default Value           |
-| ---------------------- | ----------------------------------------------------------- | ----------------------- |
-| `EXT_BYPASSER_URL`     | The full URL of your external resolver (required)           |                         |
-| `EXT_BYPASSER_PATH`    | API path for the resolver (usually `/v1`)                   | `/v1`                   |
-| `EXT_BYPASSER_TIMEOUT` | Timeout for page loading (in milliseconds)                  | `60000`                 |
-
-#### Important
-
-This feature follows the same configuration of the built-in Cloudflare bypasser, so you should turn on the `USE_CF_BYPASS` configuration to enable it.
-
-#### To use the External Cloudflare resolver variant:
-
-1.  Get the extbp-specific docker-compose file:
-    ```bash
-    curl -O https://raw.githubusercontent.com/calibrain/calibre-web-automated-book-downloader/refs/heads/main/docker-compose.extbp.yml
-    ```
-2.  Start the service using this file:
-    ```bash
-    docker compose -f docker-compose.extbp.yml up -d
-    ```
-
-#### Compatibility:
-This feature is designed to work with any resolver that implements the `FlareSolverr` API schema, including `ByParr` and similar projects.
-
-#### Benefits:
-
-- Centralizes Cloudflare bypass logic for easier maintenance.
-- Can leverage more powerful or distributed resolver infrastructure.
-- Reduces load on the main application container.
-
-## 🏗️ Architecture
-
-The application consists of a single service:
-
-1. **calibre-web-automated-bookdownloader**: Main application providing web interface and download functionality
-
-## 🏥 Health Monitoring
-
-Built-in health checks monitor:
-
-- Web interface availability
-- Download service status
-- Cloudflare bypass service connection
-
-Checks run every 30 seconds with a 30-second timeout and 3 retries.
-You can enable by adding this to your compose :
-```
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD pyrequests http://localhost:8084/request/api/status || exit 1
+  - /your/config/path:/config # Config, database, and artwork cache directory
+  - /your/download/path:/books # Downloaded books
+  - /client/path:/client/path # Optional: For Torrent/Usenet downloads, match your client directory exactly. 
 ```
 
-## 📝 Logging
+> **Tip**: Point the download volume to your CWA or Booklore ingest folder for automatic import.
 
-Logs are available in:
+> **Note**: CIFS shares require `nobrl` mount option to avoid database lock errors.
 
-- Container: `/var/logs/cwa-book-downloader.log`
-- Docker logs: Access via `docker logs`
+## ⚙️ Configuration
 
-## 🤝 Contributing
+### Search Modes
 
-Contributions are welcome! Feel free to submit a Pull Request.
+**Direct** (default)
+- Works out of the box, no setup required
+- Searches a huge library of books directly
+- Returns downloadable releases immediately
 
-## 📄 License
+**Universal**
+- Cleaner search results via metadata providers (Hardcover is recommended)
+- Aggregates releases from multiple configured sources
+- Full Audiobook support
+- Requires manual setup (API keys, additional sources)
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+### Environment Variables
 
-## ⚠️ Important Disclaimers
+Environment variables work for initial setup and Docker deployments. They serve as defaults that can be overridden in the web interface.
 
-### Copyright Notice
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `FLASK_PORT` | Web interface port | `8084` |
+| `INGEST_DIR` | Book download directory | `/books` |
+| `TZ` | Container timezone | `UTC` |
+| `PUID` / `PGID` | Runtime user/group ID (also supports legacy `UID`/`GID`) | `1000` / `1000` |
+| `SEARCH_MODE` | `direct` or `universal` | `direct` |
+| `USING_TOR` | Enable Tor routing (requires `NET_ADMIN` capability) | `false` |
 
-While this tool can access various sources including those that might contain copyrighted material (e.g., Anna's Archive), it is designed for legitimate use only. Users are responsible for:
+See the full [Environment Variables Reference](docs/environment-variables.md) for all available options.
 
-- Ensuring they have the right to download requested materials
-- Respecting copyright laws and intellectual property rights
-- Using the tool in compliance with their local regulations
+Some of the additional options available in Settings:
+- **Fast Download Key** - Use your paid account to skip Cloudflare challenges entirely and use faster, direct downloads
+- **Prowlarr** - Configure indexers and download clients to download books and audiobooks
+- **AudiobookBay** - Web scraping source for audiobook torrents (audiobooks only)
+- **IRC** - Add details for IRC book sources and download directly from the UI
+- **Library Link** - Add a link to your Calibre-Web or Booklore instance in the UI header
+- **File processing** - Customiseable download paths, file renaming and directory creation with template-based renaming
+- **Network Resilience** - Auto DNS rotation and mirror fallback when sources are unreachable. Custom proxy support (SOCK5 + HTTP/S), Tor routing.
+- **Format & Language** - Filter downloads by preferred formats, languages and sorting order
+- **Metadata Providers** - Configure API keys for Hardcover, Open Library, etc.
 
-### Duplicate Downloads Warning
+## 🐳 Docker Variants
 
-Please note that the current version:
+### Standard
+```bash
+docker compose up -d
+```
 
-- Does not check for existing files in the download directory
-- Does not verify if books already exist in your Calibre database
-- Exercise caution when requesting multiple books to avoid duplicates
+The full-featured image with built-in Cloudflare bypass.
 
-## 💬 Support
+#### Enable Tor Routing
+Routes all traffic through Tor for enhanced privacy:
+```bash
+curl -O https://raw.githubusercontent.com/calibrain/shelfmark/main/compose/docker-compose.tor.yml
+docker compose -f docker-compose.tor.yml up -d
+```
 
-For issues or questions, please file an issue on the GitHub repository.
+**Notes:**
+- Requires `NET_ADMIN` and `NET_RAW` capabilities
+- Timezone is auto-detected from Tor exit node
+- Custom DNS/proxy settings are ignored when Tor is active
 
+### Lite
+A smaller image without the built-in Cloudflare bypasser. Ideal for:
+
+- **External bypassers** - Already running FlareSolverr or ByParr for other services
+- **Fast downloads** - Using fast download sources
+- **Alternative sources only** - Exclusively using Prowlarr, AudiobookBay, IRC, or other sources
+- **Audiobooks** - Using Shelfmark exclusively for audiobooks
+
+```bash
+curl -O https://raw.githubusercontent.com/calibrain/shelfmark/main/compose/docker-compose.lite.yml
+docker compose -f docker-compose.lite.yml up -d
+```
+
+If you need Cloudflare bypass with the Lite image, configure an external resolver (FlareSolverr/ByParr) in Settings under the Cloudflare tab.
+
+## 🔐 Authentication
+
+Authentication is optional but recommended for shared or exposed instances. Multiple authentication methods are available in Settings:
+
+**1. Single Username/Password**
+
+**2. Proxy (Forward) Authentication**
+
+Proxy auth trusts headers set by your reverse proxy (e.g. `X-Auth-User`). Ensure Shelfmark is not directly exposed, and configure your proxy to strip/overwrite these headers for all inbound requests.
+
+**3. OIDC (OpenID Connect)**
+
+Integrate with your identity provider (Authelia, Authentik, Keycloak, etc.) for single sign-on. Supports PKCE flow, auto-discovery, group-based admin mapping, and auto-provisioning of new users.
+
+**4. Calibre-Web Database**
+
+If you're running Calibre-Web, you can reuse its user database by mounting it:
+
+```yaml
+volumes:
+  - /path/to/calibre-web/app.db:/auth/app.db:ro
+```
+
+### Multi-User Support
+
+With any authentication method enabled, Shelfmark supports multi-user management with admin/user roles. Users can have per-user settings for download destinations, email recipients, and notification preferences. Non-admin users only see their own downloads and can submit book requests for admin review. Admins can configure request policies per source to control whether users can download directly, must submit a request, or are blocked entirely.
+
+## Project Scope
+
+Shelfmark is a manual search and download tool, the entry point to your book library, not a library manager. It finds books, downloads them, and sends them to a configured destination. That's the full scope.
+
+Shelfmark intentionally does not:
+
+- **Track or manage your library** - it doesn't know or care what you already own
+- **Integrate with library software** - what happens after delivery is up to your library tool
+- **Monitor authors, series, or new releases** - there is no background automation
+- **Queue future downloads** - if a book isn't available now, Shelfmark won't watch for it
+
+These are non-goals, not missing features.
+
+## Contributing
+
+Shelfmark's core feature set is complete. Development focuses on stability, bug fixes, quality-of-life improvements, and refining the search experience. Contributions in these areas are welcome, please file issues or submit pull requests on GitHub.
+
+Feature requests that fall outside the project scope (library integration, automation, collection management) will be closed. If you're unsure whether something fits, open a discussion first.
+
+## Health Monitoring
+
+The application exposes a health endpoint at `/api/health` (no authentication required). Add a health check to your compose:
+
+```yaml
+healthcheck:
+  test: ["CMD", "curl", "-sf", "http://localhost:8084/api/health"]
+  interval: 30s
+  timeout: 30s
+  retries: 3
+```
+
+## Logging
+
+Logs are available via:
+- `docker logs <container-name>`
+- `/var/log/shelfmark/` inside the container (when `ENABLE_LOGGING=true`)
+
+Log level is configurable via Settings or `LOG_LEVEL` environment variable.
+
+## Development
+
+```bash
+# Frontend development
+make install     # Install dependencies
+make dev         # Start Vite dev server (localhost:5173)
+make build       # Production build
+make typecheck   # TypeScript checks
+
+# Backend (Docker)
+make up          # Start backend via docker-compose.dev.yml
+make down        # Stop services
+make refresh     # Rebuild and restart
+make restart     # Restart container
+```
+
+The frontend dev server proxies to the backend on port 8084.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## ⚠️ Disclaimer
+
+Shelfmark is a search interface that displays results from external metadata providers and sources. It does not host, store, or distribute any content. The developers are not responsible for how the tool is used or what is accessed through it.
+
+Users are solely responsible for:
+- Ensuring they have the legal right to download any material they access
+- Complying with copyright laws and intellectual property rights in their jurisdiction
+- Understanding and accepting the terms of any sources they configure
+
+Use of this tool is entirely at your own risk.
+
+## Support
+
+For issues or questions, please [file an issue](https://github.com/calibrain/shelfmark/issues) on GitHub.

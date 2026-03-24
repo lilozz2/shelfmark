@@ -1,5 +1,31 @@
+ARG TARGETPLATFORM
+ARG TARGETARCH
+ARG BUILDPLATFORM
+ARG BUILDARCH
+
+# Frontend build stage.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-builder
+
+# Helpful debug output to see what platforms BuildKit thinks it's using
+RUN echo "BUILDPLATFORM=$BUILDPLATFORM BUILDARCH=$BUILDARCH TARGETPLATFORM=$TARGETPLATFORM TARGETARCH=$TARGETARCH"
+
+WORKDIR /frontend
+
+# Copy frontend package files
+COPY src/frontend/package*.json ./
+
+# Install dependencies (cache mount for faster rebuilds)
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
+
+# Copy frontend source
+COPY src/frontend/ ./
+
+# Build the frontend
+RUN npm run build
+
 # Use python-slim as the base image
-FROM python:3.10-slim AS base
+FROM python:3.14-slim AS base
 
 # Add build argument for version
 ARG BUILD_VERSION
@@ -19,13 +45,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_DEFAULT_TIMEOUT=100 \
-    NAME=Calibre-Web-Automated-Book-Downloader \
+    NAME=Shelfmark \
     PYTHONPATH=/app \
-    # UID/GID will be handled by entrypoint script, but TZ/Locale are still needed
+    # PUID/PGID will be handled by entrypoint script, but TZ/Locale are still needed
     LANG=en_US.UTF-8 \
     LANGUAGE=en_US:en \
-    LC_ALL=en_US.UTF-8 \
-    APP_ENV=prod
+    LC_ALL=en_US.UTF-8
 
 # Set ARG for build-time expansion (FLASK_PORT), ENV for runtime access
 ENV FLASK_PORT=8084
@@ -43,7 +68,14 @@ RUN apt-get update && \
     # For debug
     zip iputils-ping \
     # For user switching
-    sudo && \
+    gosu \
+    # --- Tor support (activated via USING_TOR=true) ---
+    tor \
+    supervisor \
+    iptables && \
+    # Configure iptables alternatives for tor.sh compatibility
+    update-alternatives --set iptables /usr/sbin/iptables-legacy && \
+    update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy && \
     # Cleanup APT cache *after* all installs in this layer
     apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false && \
     apt-get clean && \
@@ -60,35 +92,37 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Install Python dependencies using pip
-# Upgrade pip first, then copy requirements and install
-# Copying requirements-base.txt separately leverages build cache
-COPY requirements-base.txt .
-RUN pip install --no-cache-dir -r requirements-base.txt && \
-    # Clean root's pip cache
-    rm -rf /root/.cache
+# Copying requirements files separately leverages build cache
+# Cache mount persists pip cache between builds for faster installs
+COPY requirements-base.txt requirements-shelfmark.txt ./
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements-base.txt
 
 # Copy application code *after* dependencies are installed
 COPY . .
 
+# Copy built frontend from frontend-builder stage
+COPY --from=frontend-builder /frontend/dist /app/frontend-dist
+
 # Final setup: permissions and directories in one layer
 # Only creating directories and setting executable bits.
 # Ownership will be handled by the entrypoint script.
-RUN mkdir -p /var/log/cwa-book-downloader /cwa-book-ingest && \
+RUN mkdir -p /var/log/shelfmark /books && \
     chmod +x /app/entrypoint.sh /app/tor.sh /app/genDebug.sh
 
 # Expose the application port
 EXPOSE ${FLASK_PORT}
 
 # Add healthcheck for container status
-# This will run as root initially, but check localhost which should work if the app binds correctly.
+# Uses /api/health which doesn't require authentication
 HEALTHCHECK --interval=60s --timeout=60s --start-period=60s --retries=3 \
-    CMD curl -s http://localhost:${FLASK_PORT}/request/api/status > /dev/null || exit 1
+    CMD curl -s http://localhost:${FLASK_PORT}/api/health > /dev/null || exit 1
 
 # Use dumb-init as the entrypoint to handle signals properly
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 
 
-FROM base AS cwa-bd
+FROM base AS shelfmark
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -96,49 +130,33 @@ RUN apt-get update && \
     xvfb \
     # For screen recording
     ffmpeg \
-    # --- Chromium ---
+    # --- Chromium (unpinned - uses latest from Debian repos) ---
+    # Chrome 144+ requires --enable-unsafe-swiftshader for WebGL in Docker.
+    # This flag is set in internal_bypasser.py _get_browser_args()
     chromium \
-    # --- ChromeDriver ---
-    chromium-driver \
+    chromium-common \
     # For tkinter (pyautogui)
-    python3-tk
-
-# install additional dependencies
-COPY requirements-cwa-bd.txt .
-RUN pip install --no-cache-dir -r requirements-cwa-bd.txt && \
-    # Clean root's pip cache
-    rm -rf /root/.cache
-
-# Add this line to grant read/execute permissions to others
-RUN chmod -R o+rx /usr/bin/chromium && \
-    chmod -R o+rx /usr/bin/chromedriver && \
-    chmod -R o+w /usr/local/lib/python3.10/site-packages/seleniumbase/drivers/
-
-# Default command to run the application entrypoint script
-CMD ["/app/entrypoint.sh"]
-
-FROM cwa-bd AS cwa-bd-tor
-
-ENV USING_TOR=true
-
-# Install Tor and dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    # --- Tor ---
-    tor \
-    # --- iptables ---
-    iptables && \
-    update-alternatives --set iptables /usr/sbin/iptables-legacy && \
-    update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy && \
-    # Cleanup APT cache *after* all installs in this layer
+    python3-tk \
+    # For RAR extraction
+    unrar-free && \
+    # Create symlink so rarfile library can find unrar
+    ln -sf /usr/bin/unrar-free /usr/bin/unrar && \
+    # Cleanup APT cache
     apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Override the default command to run Tor
+# Install additional dependencies (requirements file already copied in base stage)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements-shelfmark.txt
+
+# Grant read/execute permissions to others
+RUN chmod -R o+rx /usr/bin/chromium
+
+# Default command to run the application entrypoint script
 CMD ["/app/entrypoint.sh"]
 
-FROM base AS cwa-bd-extbp
+FROM base AS shelfmark-lite
 
 ENV USING_EXTERNAL_BYPASSER=true
 

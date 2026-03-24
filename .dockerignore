@@ -1,6 +1,7 @@
 .git
 .github
 .vscode
+.local
 .mypy_cache
 README_images
 .gitignore
@@ -37,3 +38,13 @@ dist/
 venv/
 .venv/
 env/
+
+# Frontend build artifacts (built in separate stage)
+src/frontend/node_modules/
+src/frontend/dist/
+src/frontend/.vite/
+
+# Old frontend code (replaced by src/frontend)
+templates/
+static/css/
+static/js/
