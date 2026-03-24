@@ -27,12 +27,9 @@ services:
       - ./certs:/certs:ro
       - ./traefik-tls.yml:/etc/traefik/tls.yml:ro
 
-  calibre-web-automated-book-downloader:
-    # image: ghcr.io/calibrain/calibre-web-automated-book-downloader:latest
-    # Uncomment to build the image from the Dockerfile for local testing changes.
-    # Remember to comment out the image line above.
-    build: .
-    container_name: calibre-web-automated-book-downloader
+  shelfmark:
+    image: ghcr.io/calibrain/shelfmark:latest
+    container_name: shelfmark
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.cwab.rule=Host(`www.homelibrary.me`) && PathPrefix(`/add-books/`)"
@@ -42,30 +39,18 @@ services:
       - "traefik.http.middlewares.cwab-strip.stripprefix.prefixes=/add-books"
       - "traefik.http.services.cwab.loadbalancer.server.port=8084"
     environment:
-      APPLICATION_ROOT: /add-books
+      PUID: 1000
+      PGID: 100
       FLASK_PORT: 8084
-      LOG_LEVEL: info
-      BOOK_LANGUAGE: en
-      USE_BOOK_TITLE: true
       TZ: America/New_York
-      APP_ENV: prod
-      UID: 1000
-      GID: 100
-      # CWA_DB_PATH: /auth/app.db  # Comment out to disable authentication
-      # Queue management settings
-      MAX_CONCURRENT_DOWNLOADS: 3
-      DOWNLOAD_PROGRESS_UPDATE_INTERVAL: 5
+      URL_BASE: /add-books
     networks:
       - web
     restart: unless-stopped
     # port 8084 is handled by Traefik
     volumes:
-      # This is where the books will be downloaded to, usually it would be
-      # the same as whatever you gave in "calibre-web-automated"
-      - /tmp/data/calibre-web/ingest:/cwa-book-ingest
-      # This is the location of CWA's app.db, which contains authentication
-      # details. Comment out to disable authentication
-      #- /cwa/config/path/app.db:/auth/app.db:ro
+      - /tmp/data/calibre-web/ingest:/books
+      - /path/to/config:/config
 
 networks:
   web:
